@@ -237,13 +237,25 @@ class KiaUvoApiEU(ApiImplType1):
         _LOGGER.debug(f"{DOMAIN} - get_cached_vehicle_status response: {response}")
         _check_response_for_errors(response)
 
-        if vehicle.ccu_ccs2_protocol_support == 0:
-            self._update_vehicle_properties(
-                vehicle, response["resMsg"]["vehicleStatusInfo"]
-            )
-        else:
+        if is_ccs2:
             state = response["resMsg"]["state"]["Vehicle"]
             self._update_vehicle_properties_ccs2(vehicle, state)
+            # The CCS2 status response embeds a stale cached location.
+            # Override it with the more current /location/park endpoint.
+            location = self._get_location(token, vehicle)
+            if location and get_child_value(location, "coord.lat"):
+                vehicle.location = (
+                    get_child_value(location, "coord.lat"),
+                    get_child_value(location, "coord.lon"),
+                    parse_datetime(
+                        get_child_value(location, "time"), self.data_timezone
+                    ),
+                )
+        else:
+            # I have no idea if calling get_location is necessary for this case?
+            self._update_vehicle_properties(
+                vehicle, response["resMsg"]["vehicleStatusInfo"],
+            )
 
         # The status response embeds a stale cached location.
         # Override it with the more current /location/park endpoint.
